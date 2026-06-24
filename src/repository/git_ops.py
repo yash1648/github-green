@@ -5,11 +5,17 @@ from __future__ import annotations
 import logging
 import os
 import subprocess
+import time
 from pathlib import Path
 
 from src.models.problem import ProblemContext
 
 log = logging.getLogger(__name__)
+
+# Maximum push retry attempts
+_MAX_PUSH_RETRIES = 3
+# Base delay in seconds between push retries (doubles each attempt)
+_PUSH_RETRY_BASE_DELAY = 5
 
 
 class GitManager:
@@ -34,6 +40,9 @@ class GitManager:
 
     def commit_and_push(self, problem: ProblemContext) -> bool:
         """Stage, commit, and push the new solution directory.
+
+        Includes pull-before-push safety (in GitHub Actions) and
+        up to 3 push retries with exponential backoff.
 
         Args:
             problem: The problem context for the commit message.
@@ -67,16 +76,35 @@ class GitManager:
         )
         log.info("Committed: %s", commit_msg)
 
-        # Push
-        remote_url = self._get_authenticated_remote()
-        if remote_url:
-            self._run_git("push", remote_url, self.branch)
-            log.info("Pushed to %s/%s", remote_url, self.branch)
-        else:
-            self._run_git("push", "origin", self.branch)
-            log.info("Pushed to origin/%s", self.branch)
+        # Determine push remote
+        remote = self._get_authenticated_remote() or "origin"
 
-        return True
+        # Pull rebase before push (only in CI to avoid local disruption)
+        if os.environ.get("GITHUB_ACTIONS") == "true":
+            if self._pull_rebase(remote):
+                log.debug("Remote is up to date after rebase pull")
+            else:
+                log.warning("Rebase pull failed — will try push anyway")
+
+        # Push with retry
+        last_error = None
+        for attempt in range(1, _MAX_PUSH_RETRIES + 1):
+            try:
+                self._run_git("push", remote, self.branch)
+                log.info("Pushed to %s/%s (attempt %d/%d)", remote, self.branch, attempt, _MAX_PUSH_RETRIES)
+                return True
+            except RuntimeError as e:
+                last_error = e
+                if attempt < _MAX_PUSH_RETRIES:
+                    delay = _PUSH_RETRY_BASE_DELAY * (2 ** (attempt - 1))
+                    log.warning(
+                        "Push attempt %d/%d failed — retrying in %ds: %s",
+                        attempt, _MAX_PUSH_RETRIES, delay, e,
+                    )
+                    time.sleep(delay)
+
+        log.error("All %d push attempts failed: %s", _MAX_PUSH_RETRIES, last_error)
+        return False
 
     def setup_git_config(self) -> None:
         """Ensure git user config is set (for environments without it)."""
@@ -86,6 +114,26 @@ class GitManager:
             log.debug("Git user config set")
         except RuntimeError:
             log.warning("Could not set git user config")
+
+    def _pull_rebase(self, remote_url: str) -> bool:
+        """Pull with rebase to catch up with remote before pushing.
+
+        Uses the same remote URL strategy as push for consistency.
+        Returns True on success, False on conflict or other failure.
+        """
+        try:
+            self._run_git("pull", "--rebase", remote_url, self.branch)
+            log.debug("Rebase pull successful from %s/%s", remote_url, self.branch)
+            return True
+        except RuntimeError as e:
+            # Check if rebase had conflicts
+            if "merge" in str(e).lower() or "conflict" in str(e).lower():
+                log.error("Rebase conflict — aborting rebase")
+                try:
+                    self._run_git("rebase", "--abort")
+                except RuntimeError:
+                    pass
+            return False
 
     def _get_authenticated_remote(self) -> str | None:
         """Build an authenticated remote URL using GITHUB_TOKEN if available."""
