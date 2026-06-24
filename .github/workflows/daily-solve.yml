@@ -5,8 +5,6 @@
 name: Daily DSA Solve
 
 on:
-  push:
-    branches: [main]
   schedule:
     # At 01:00 UTC every day — you can change this later
     - cron: "0 1 * * *"
