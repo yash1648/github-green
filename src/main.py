@@ -104,23 +104,33 @@ def execute_pipeline(problem: "ProblemContext", config: dict) -> None:
     """
     exec_config = config.get("execution", {}).get("llm", {})
 
-    # Initialize LLM client (supports OpenAI + NVIDIA NIM + any OpenAI-compatible API)
-    llm = LLMClient(
-        base_url=exec_config.get("base_url"),
-        model=exec_config.get("model", "nvidia/nemotron-mini-4b-instruct"),
+    base_url = exec_config.get("base_url")
+    retry_count = exec_config.get("retry_count", 3)
+    retry_delay = exec_config.get("retry_delay", 5)
+
+    # Stage 1: Generate solution code (heavy model for code quality)
+    code_llm = LLMClient(
+        base_url=base_url,
+        model=exec_config.get("model_code", "deepseek-ai/deepseek-coder-6.7b-instruct"),
         temperature=exec_config.get("temperature_code", 0.2),
         max_tokens=exec_config.get("max_tokens_code", 2048),
-        retry_count=exec_config.get("retry_count", 3),
-        retry_delay=exec_config.get("retry_delay", 5),
+        retry_count=retry_count,
+        retry_delay=retry_delay,
     )
-
-    # Stage 1: Generate solution code
-    code_gen = CodeGenerator(llm)
+    code_gen = CodeGenerator(code_llm)
     solution_code = code_gen.generate_code(problem)
     log.info("Solution code generated (%d bytes)", len(solution_code))
 
-    # Stage 2: Generate documentation
-    doc_writer = DocWriter(llm)
+    # Stage 2: Generate documentation (lighter model for creative writing)
+    doc_llm = LLMClient(
+        base_url=base_url,
+        model=exec_config.get("model_doc", "nvidia/nemotron-mini-4b-instruct"),
+        temperature=exec_config.get("temperature_doc", 0.7),
+        max_tokens=exec_config.get("max_tokens_doc", 1500),
+        retry_count=retry_count,
+        retry_delay=retry_delay,
+    )
+    doc_writer = DocWriter(doc_llm)
     doc = doc_writer.generate_doc(problem, solution_code)
     log.info("Documentation generated (%d bytes)", len(doc))
 

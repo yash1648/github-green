@@ -1,4 +1,4 @@
-"""Stage 1: LLM Code Generator — produces production-grade solution code."""
+"""Stage 1: LLM Code Generator — produces LeetCode-format solution code."""
 
 from __future__ import annotations
 
@@ -9,24 +9,31 @@ from src.models.problem import ProblemContext
 
 log = logging.getLogger(__name__)
 
-# System prompt for the code generation stage
+# System prompt for the code generation stage — strict LeetCode format
 CODE_GENERATOR_SYSTEM_PROMPT = """You are an expert competitive programmer. Your task is to write clean, 
-efficient, and correct solution code for Data Structures and Algorithms problems.
+efficient, and correct LeetCode solution code.
+
+CRITICAL — LeetCode Format Requirements:
+- Output ONLY the `class Solution { public: ... };` block — nothing else.
+- NO `#include` directives, NO `main()` function, NO I/O (cin/cout).
+- The solution must be a valid LeetCode submission: a class with a public method.
+- The method signature must match the standard LeetCode signature for this problem.
+- Use the examples below to infer the correct parameter types and return type.
 
 Guidelines:
-- Write production-grade code with proper error handling.
+- Write production-grade code with proper edge case handling.
 - Optimize for time and space complexity (specify complexity in comments).
-- Use idiomatic language features — the code should look like a human wrote it.
+- Use idiomatic C++ features (STL containers, algorithms).
 - Include clear variable names and logic comments.
-- Only output the solution code — no explanations, no markdown formatting.
-- Wrap the code in the appropriate class/function signature as provided in the boilerplate.
+- Only output the code — no explanations, no markdown formatting.
 """
 
 
 class CodeGenerator:
     """Stage 1 of the LLM pipeline — generates solution code.
 
-    Takes a ProblemContext and produces a solution file string.
+    Takes a ProblemContext and produces a solution file string
+    in standard LeetCode format (class Solution with public method).
     """
 
     def __init__(self, llm_client: LLMClient):
@@ -39,7 +46,7 @@ class CodeGenerator:
             problem: The problem context from ingestion.
 
         Returns:
-            Solution source code as a string.
+            Solution source code as a string (LeetCode format).
         """
         log.info("Generating solution code for: %s", problem.title)
 
@@ -77,16 +84,20 @@ Constraints:
 Examples:
 {examples_str}
 
-{("Boilerplate:\n" + problem.boilerplate) if problem.boilerplate else ""}
+Write the complete LeetCode solution in {problem.language}.
 
-Write the complete solution in {problem.language}. Include time and space complexity analysis as comments at the top."""
+REMEMBER:
+- ONLY output the `class Solution {{ public: ... }};` block
+- NO #include, NO main(), NO cin/cout
+- The method name and signature must match LeetCode's standard for this problem
+- Infer the parameter types and return type from the examples above
+- Include time/space complexity as comments at the top of the method"""
 
     @staticmethod
     def _clean_code(code: str) -> str:
         """Remove markdown code fences if present."""
         code = code.strip()
         if code.startswith("```"):
-            # Remove first fence line (``` or ```cpp etc.)
             first_newline = code.find("\n")
             if first_newline != -1:
                 code = code[first_newline + 1:]

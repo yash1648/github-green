@@ -24,7 +24,12 @@ execution:
     # Sign up at https://build.nvidia.com to get an nvapi- key
     # Set NVIDIA_API_KEY (or OPENAI_API_KEY) env var
     base_url: "https://integrate.api.nvidia.com/v1"
-    model: "nvidia/nemotron-mini-4b-instruct"
+
+    # Model for Stage 1 (code generation) — heavy model for best quality
+    model_code: "meta/llama-3.1-70b-instruct"
+    # Model for Stage 2 (documentation) — lighter model for creative writing
+    model_doc: "nvidia/nemotron-mini-4b-instruct"
+
     temperature_code: 0.2   # Low temp for deterministic code
     temperature_doc: 0.7    # Higher temp for creative docs
     max_tokens_code: 2048

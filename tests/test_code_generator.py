@@ -60,4 +60,6 @@ class TestCodeGenerator:
         assert "Medium" in prompt
         assert "Find the two numbers" in prompt
         assert "2 <= n <= 10^4" in prompt
-        assert "class Solution {}" in prompt
+        # Prompt no longer includes boilerplate directly — it now instructs
+        # the LLM to produce the class Solution block itself
+        assert "class Solution" in prompt
