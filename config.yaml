@@ -4,7 +4,7 @@
 
 pipeline:
   # Target programming language for solutions
-  language: "cpp"
+  language: "java"
   # Output root directory under repo
   output_root: "LeetCode"
 

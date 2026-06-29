@@ -15,7 +15,7 @@ class TestLoadConfig:
         assert "pipeline" in config
         assert "ingestion" in config
         assert "execution" in config
-        assert config["pipeline"]["language"] == "cpp"
+        assert config["pipeline"]["language"] == "java"
 
     def test_load_missing_config(self):
         """Missing config file should return empty dict."""
