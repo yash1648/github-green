@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import random
+import re
 from pathlib import Path
 
 from src.ingestion.base import ProblemFetcher, IngestionError
