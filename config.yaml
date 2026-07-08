@@ -18,6 +18,11 @@ ingestion:
     timeout: 30
     # How many problems to fetch per page when picking randomly
     page_size: 50
+  alt_leetcode:
+    # noworneverev/leetcode-api Vercel-hosted — second-chance live source
+    enabled: true
+    api_url: "https://leetcode-api-pied.vercel.app"
+    timeout: 30
   backlog:
     # Path to local backlog JSON file
     file_path: "backlog.json"

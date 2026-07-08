@@ -22,6 +22,7 @@ from pathlib import Path
 
 import yaml
 
+from src.ingestion.alt_leetcode import AltLeetCodeFetcher
 from src.ingestion.backlog import BacklogFetcher
 from src.ingestion.leetcode import LeetCodeFetcher
 from src.ingestion.base import IngestionError
@@ -102,11 +103,26 @@ def fetch_problem(config: dict, exclude_slugs: set[str] | None = None) -> "Probl
             log.info("Fetched random LeetCode problem: %s", problem.title)
             return problem
         except IngestionError as e:
-            log.warning("LeetCode fetch failed: %s — switching to backlog", e)
+            log.warning("LeetCode fetch (primary) failed: %s — trying alternative API...", e)
     else:
-        log.info("LeetCode ingestion disabled in config — using backlog")
+        log.info("LeetCode ingestion disabled in config — trying alternative API...")
 
-    # Fallback: Backlog
+    # Fallback 1: Alternative LeetCode API (Vercel-hosted)
+    alt_config = ingestion_config.get("alt_leetcode", {})
+    if alt_config.get("enabled", True):
+        try:
+            fetcher = AltLeetCodeFetcher(
+                api_url=alt_config.get("api_url", "https://leetcode-api-pied.vercel.app"),
+                timeout=alt_config.get("timeout", 30),
+                language=language,
+            )
+            problem = fetcher.fetch(exclude_slugs=exclude_slugs)
+            log.info("Fetched from alternative LeetCode API: %s", problem.title)
+            return problem
+        except IngestionError as e:
+            log.warning("Alternative LeetCode fetch failed: %s — switching to backlog", e)
+
+    # Fallback 2: Backlog (local file)
     backlog_config = ingestion_config.get("backlog", {})
     backlog_path = backlog_config.get("file_path", "backlog.json")
     fetcher = BacklogFetcher(file_path=backlog_path, language=language)
