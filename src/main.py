@@ -295,7 +295,11 @@ def run(config: dict) -> int:
 
         for i in range(commit_count):
             log.info("--- Problem %d/%d ---", i + 1, commit_count)
-            problem = fetch_problem(config, exclude_slugs=excluded)
+            try:
+                problem = fetch_problem(config, exclude_slugs=excluded)
+            except IngestionError as e:
+                log.warning("Skipping — no problem available: %s", e)
+                continue
 
             # Mark as solved so subsequent iterations don't re-pick
             slug = re.sub(

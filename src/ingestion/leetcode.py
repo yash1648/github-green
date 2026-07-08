@@ -12,6 +12,7 @@ from __future__ import annotations
 import logging
 import random
 import re
+import time
 from typing import Any
 
 import requests
@@ -54,6 +55,29 @@ class LeetCodeFetcher(ProblemFetcher):
                 "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
             ),
         })
+        self.max_retries_429 = 3
+
+    def _get_with_retry(self, url: str, params: dict | None = None) -> requests.Response:
+        """GET with exponential backoff on 429 rate limit.
+
+        Retries up to ``max_retries_429`` times with 2, 4, 8 second delays.
+        All other HTTP errors propagate immediately.
+        """
+        for attempt in range(self.max_retries_429):
+            resp = self.session.get(url, params=params, timeout=self.timeout)
+            if resp.status_code == 429:
+                wait = 2 ** attempt
+                log.warning(
+                    "Rate limited (429) on %s — retry %d/%d in %ds",
+                    url, attempt + 1, self.max_retries_429, wait,
+                )
+                time.sleep(wait)
+                continue
+            resp.raise_for_status()
+            return resp
+        raise IngestionError(
+            f"Rate limited on {url} after {self.max_retries_429} retries."
+        )
 
     def fetch(self, exclude_slugs: set[str] | None = None) -> ProblemContext:
         """Fetch a random unsolved LeetCode problem with full metadata.
@@ -167,12 +191,7 @@ class LeetCodeFetcher(ProblemFetcher):
     def _get_total_problems(self) -> int:
         """Get the total number of problems available."""
         try:
-            resp = self.session.get(
-                f"{self.api_url}/problems",
-                params={"limit": 1},
-                timeout=self.timeout,
-            )
-            resp.raise_for_status()
+            resp = self._get_with_retry(f"{self.api_url}/problems", params={"limit": 1})
             data = resp.json()
             return data.get("totalQuestions", 0)
         except requests.RequestException as e:
@@ -181,12 +200,10 @@ class LeetCodeFetcher(ProblemFetcher):
     def _list_problems(self, skip: int = 0, limit: int | None = None) -> list[dict]:
         """Fetch a page of problems from the listing endpoint."""
         try:
-            resp = self.session.get(
+            resp = self._get_with_retry(
                 f"{self.api_url}/problems",
                 params={"limit": limit or self.page_size, "skip": skip},
-                timeout=self.timeout,
             )
-            resp.raise_for_status()
             data = resp.json()
             return data.get("problemsetQuestionList", [])
         except requests.RequestException as e:
@@ -196,12 +213,10 @@ class LeetCodeFetcher(ProblemFetcher):
         """Fetch a specific problem by its slug (e.g., 'two-sum') with full metadata."""
         log.info("Fetching problem by slug: %s", title_slug)
         try:
-            resp = self.session.get(
+            resp = self._get_with_retry(
                 f"{self.api_url}/select/raw",
                 params={"titleSlug": title_slug},
-                timeout=self.timeout,
             )
-            resp.raise_for_status()
             data = resp.json()
             return self._parse_problem(data.get("question", data))
         except requests.RequestException as e:
