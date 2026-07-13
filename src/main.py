@@ -188,7 +188,6 @@ def deploy(problem: "ProblemContext", config: dict) -> bool:
     Args:
         problem: The problem that was solved.
         config: Pipeline config.
-
     Returns:
         True if commit+push succeeded.
     """
